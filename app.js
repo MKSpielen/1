@@ -10,7 +10,7 @@ const COLORS={
 const TRACK=[[842,222],[842,314],[842,406],[922,452],[1002,498],[1082,452],[1162,406],[1208,486],[1254,566],[1174,612],[1094,658],[1094,750],[1094,842],[1174,888],[1254,934],[1208,1014],[1162,1094],[1082,1048],[1002,1002],[922,1048],[842,1094],[842,1186],[842,1278],[750,1278],[658,1278],[658,1186],[658,1094],[578,1048],[498,1002],[418,1048],[338,1094],[292,1014],[246,934],[326,888],[406,842],[406,750],[406,658],[326,612],[246,566],[292,486],[338,406],[418,452],[498,498],[578,452],[658,406],[658,314],[658,222],[750,222]];
 const KEYS=Object.keys(COLORS), $=id=>document.getElementById(id);
 const LOBBY_ID='maedn6-global-lobby-v1';
-const S={room:null,host:false,peer:null,conn:null,myId:null,connections:[],players:[],phase:'lobby',turn:0,dice:null,lastDice:null,diceOwner:null,pawns:{},opening:{order:[],index:0,results:{}},houseRolls:0,joinPending:false};
+const S={room:null,host:false,peer:null,conn:null,myId:null,connections:[],players:[],phase:'lobby',turn:0,dice:null,lastDice:null,diceOwner:null,pawns:{},opening:{order:[],index:0,results:{}},houseRolls:0,joinPending:false,lobbyKnown:false};
 const colorChoices=$('colorChoices');
 KEYS.forEach(k=>{const b=document.createElement('button');b.type='button';b.className='color-choice';b.dataset.color=k;const dot=document.createElement('span');dot.className='color-dot'+(k==='black'?' black':'');dot.style.background=COLORS[k].hex;const label=document.createElement('span');label.textContent=COLORS[k].name;b.append(dot,label);b.onclick=()=>selectColor(k);colorChoices.append(b)});
 function selectColor(k){if(!COLORS[k])return;const current=$('color').value;const mine=me();const taken=S.players.some(p=>p.color===k&&p.id!==S.myId);if(taken)return;if(mine){if(S.phase==='lobby'){if(S.host){if(colorFree(k,mine.id)){mine.color=k;S.pawns[mine.id]=basePawns();broadcast()}}else if(S.conn&&S.conn.open){send(S.conn,{type:'color',id:S.myId,color:k})}else return}}$('color').value=k;updateColorChoices();if(current!==k)render()}
@@ -49,6 +49,7 @@ function connectToLobby(onReady){
       let m;try{m=typeof raw==='string'?JSON.parse(raw):raw}catch{return}
       if(m.type==='state'){
         const reveal=S.joinPending;
+        S.lobbyKnown=true;
         apply(m.state,reveal);
         S.joinPending=false;
         updateColorChoices();
@@ -74,6 +75,7 @@ function becomeLobbyHost(){
   if(S.peer&&!S.peer.destroyed){try{S.peer.destroy()}catch{}}
   S.peer=null;S.conn=null;S.myId=null;S.room='global';S.host=true;
   initPeer(LOBBY_ID,()=>{
+    S.lobbyKnown=true;
     S.players=[createPlayer(S.myId,$('name').value,$('color').value,true)];
     S.pawns[S.myId]=basePawns();
     showGame();$('netLabel').textContent='Lobby online';
@@ -97,6 +99,7 @@ function becomeLobbyHost(){
   });
 }
 function joinLobby(){
+  updateColorChoices();
   const name=$('name').value.trim();
   if(!name){setupMsg('Bitte einen Namen eingeben.');return}
   $('join').disabled=true;
@@ -197,7 +200,25 @@ function move(i){if(S.phase!=='playing'||S.dice===null)return;const p=S.players[
 function nextTurn(){S.turn=(S.turn+1)%S.players.length;S._houseRolls=0}
 function showGame(){$('setup').classList.add('hidden');$('game').classList.remove('hidden');$('roomLabel').textContent='Gemeinsame Lobby'}
 function coords(p,i){if(i<48)return TRACK[i];return COLORS[p.color].goal[i-48]}
-function updateColorChoices(){const mine=S.myId;const mineColor=S.players.find(p=>p.id===mine)?.color||$('color').value;colorChoices.querySelectorAll('.color-choice').forEach(b=>{const taken=S.players.some(p=>p.color===b.dataset.color&&p.id!==mine);b.classList.toggle('selected',b.dataset.color===mineColor);b.classList.toggle('taken',taken);b.disabled=!!taken})}
+function updateColorChoices(){
+  const mine=S.myId;
+  const minePlayer=S.players.find(p=>p.id===mine);
+  let selected=$('color').value;
+  const buttons=[...colorChoices.querySelectorAll('.color-choice')];
+  buttons.forEach(b=>{
+    const k=b.dataset.color;
+    const taken=S.players.some(p=>p.color===k&&p.id!==mine);
+    b.classList.toggle('taken',taken);
+    b.disabled=!!taken;
+  });
+  if(minePlayer) selected=minePlayer.color;
+  else if(S.lobbyKnown && S.players.some(p=>p.color===selected)){
+    const free=KEYS.find(k=>!S.players.some(p=>p.color===k));
+    if(free) selected=free;
+  }
+  $('color').value=selected;
+  buttons.forEach(b=>b.classList.toggle('selected',b.dataset.color===selected && !b.disabled));
+}
 function render(){if($('game').classList.contains('hidden'))return;const m=me(),p=S.players[S.turn];$('count').textContent=S.players.length+'/6';$('turnLabel').textContent=S.phase==='opening'?'Startwurf':S.phase==='playing'?'Am Zug: '+(p?.name||'–'):S.phase==='finished'?'Spiel beendet':'Lobby';$('die').textContent=S.lastDice??'–';if(m){$('color').value=m.color;updateColorChoices()}
 let text='';if(S.phase==='lobby')text='Lobby – der Host startet ab 2 Spielern.';else if(S.phase==='opening'){const rid=currentRollerId();text=rid===m?.id?'Du bist dran: würfle für den Start.':'Warte auf '+(S.players.find(x=>x.id===rid)?.name||'Spieler')+'.';if(S.dice!==null)text+=' Letzter Startwurf: '+S.dice+'.'}else if(S.phase==='playing'){if(needsHouseRolls(m?.id||'')&&S.dice!==null&&S.diceOwner===m?.id&&S._houseRolls>0){text=S.dice===6?'6 – Figur kann aus dem Haus.':'Keine 6 – Wurf '+S._houseRolls+'/3. Noch '+(3-S._houseRolls)+' Versuch'+(3-S._houseRolls===1?'':'e')+'.';}else if(S.dice!==null)text=S.diceOwner===m?.id?'Du hast eine '+S.dice+' gewürfelt. Wähle eine Figur.':(S.players.find(x=>x.id===S.diceOwner)?.name||'Spieler')+' hat '+S.dice+' gewürfelt.';else text=p?.id===m?.id?'Du bist dran.':'Warte auf '+(p?.name||'Spieler')+'.'}else text='Spiel beendet.';$('diceText').textContent=text;
 const canRoll=(S.phase==='opening'&&currentRollerId()===m?.id)||(S.phase==='playing'&&p?.id===m?.id&&(S.dice===null||(needsHouseRolls(m.id)&&S.diceOwner===m.id&&S._houseRolls>0)));$('roll').disabled=!canRoll;$('roll').textContent=S.phase==='opening'?'Startwurf':'Würfeln';$('start').disabled=!(S.phase==='lobby'&&S.players.length>=2);$('start').classList.toggle('hidden',S.phase!=='lobby');$('newGame').classList.toggle('hidden',false);$('lobbyHint').textContent=S.phase==='lobby'?'Ab 2 Spielern kann jeder Spieler den Startwurf starten.':S.phase==='opening'?'Jede Person würfelt einmal. Die niedrigste Zahl beginnt.':S.phase==='playing'?'Eine Figur kommt nur mit 6 aus dem Haus.':'Spiel beendet.';
