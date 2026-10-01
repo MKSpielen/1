@@ -13,7 +13,7 @@ const LOBBY_ID='maedn6-global-lobby-v1';
 const S={room:null,host:false,peer:null,conn:null,myId:null,connections:[],players:[],phase:'lobby',turn:0,dice:null,lastDice:null,diceOwner:null,pawns:{},opening:{order:[],index:0,results:{}},houseRolls:0,joinPending:false};
 const colorChoices=$('colorChoices');
 KEYS.forEach(k=>{const b=document.createElement('button');b.type='button';b.className='color-choice';b.dataset.color=k;const dot=document.createElement('span');dot.className='color-dot'+(k==='black'?' black':'');dot.style.background=COLORS[k].hex;const label=document.createElement('span');label.textContent=COLORS[k].name;b.append(dot,label);b.onclick=()=>selectColor(k);colorChoices.append(b)});
-function selectColor(k){if(!COLORS[k])return;const current=$('color').value;if(S.myId){const mine=me();if(S.phase==='lobby'&&S.players.some(p=>p.color===k&&p.id!==S.myId))return;if(S.host){const p=mine;if(p&&S.phase==='lobby'&&colorFree(k,p.id)){p.color=k;S.pawns[p.id]=basePawns();broadcast()}}else if(S.conn&&S.conn.open)send(S.conn,{type:'color',id:S.myId,color:k});else return}$('color').value=k;colorChoices.querySelectorAll('.color-choice').forEach(b=>{b.classList.toggle('selected',b.dataset.color===k);b.classList.toggle('taken',S.myId&&S.players.some(p=>p.color===b.dataset.color&&p.id!==S.myId));b.disabled=!!(S.myId&&S.players.some(p=>p.color===b.dataset.color&&p.id!==S.myId))});if(current!==k)render()}
+function selectColor(k){if(!COLORS[k])return;const current=$('color').value;const mine=me();const taken=S.players.some(p=>p.color===k&&p.id!==S.myId);if(taken)return;if(mine){if(S.phase==='lobby'){if(S.host){if(colorFree(k,mine.id)){mine.color=k;S.pawns[mine.id]=basePawns();broadcast()}}else if(S.conn&&S.conn.open){send(S.conn,{type:'color',id:S.myId,color:k})}else return}}$('color').value=k;updateColorChoices();if(current!==k)render()}
 selectColor('red');
 function setupMsg(x){$('setupMsg').textContent=x||''}function gameMsg(x){$('gameMsg').textContent=x||''}
 function cleanCode(x){return String(x||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6)}
@@ -30,6 +30,7 @@ function broadcast(){if(!S.host)return;const m={type:'state',state:snapshot()};S
 function initPeer(id,done,onError){if(typeof Peer==='undefined'){setupMsg('PeerJS konnte nicht geladen werden.');return}S.peer=new Peer(id);S.peer.on('open',pid=>{S.myId=pid;done()});S.peer.on('error',e=>{console.error(e);if(onError)onError(e);else{setupMsg(e.type==='peer-unavailable'?'Lobby nicht erreichbar.':'Verbindungsfehler: '+e.type);$('netLabel').textContent='Fehler'}});S.peer.on('disconnected',()=>{$('netLabel').textContent='Getrennt'})}
 function addConnection(c){S.connections.push(c);c.on('open',()=>{$('netLabel').textContent='Online'});c.on('data',raw=>{let m;try{m=typeof raw==='string'?JSON.parse(raw):raw}catch{return}hostMessage(c,m)});c.on('close',()=>{S.connections=S.connections.filter(x=>x!==c);if(S.host){const removed=c.peer;S.players=S.players.filter(p=>p.id!==removed);delete S.pawns[removed];S.opening.order=S.opening.order.filter(id=>id!==removed);if(S.opening.index>=S.opening.order.length)S.opening.index=0;if(S.phase!=='lobby'&&S.turn>=S.players.length)S.turn=0;broadcast()}});c.on('error',console.error)}
 function hostMessage(c,m){if(!S.host)return;
+ if(m.type==='observe'){send(c,{type:'state',state:snapshot()});return}
  if(m.type==='join'){if(S.phase!=='lobby'){send(c,{type:'reject',reason:'Das Spiel läuft bereits.'});return}if(S.players.length>=6){send(c,{type:'reject',reason:'Der Raum ist voll.'});return}if(S.players.some(p=>p.id===m.id))return;const col=COLORS[m.color]&&colorFree(m.color)?m.color:KEYS.find(k=>colorFree(k));const p=createPlayer(m.id,m.name,col,false);S.players.push(p);S.pawns[p.id]=basePawns();send(c,{type:'state',state:snapshot()});broadcast();return}
  if(m.type==='color'){const p=S.players.find(x=>x.id===m.id);if(p&&S.phase==='lobby'&&COLORS[m.color]&&colorFree(m.color,p.id)){p.color=m.color;S.pawns[p.id]=basePawns();broadcast()}return}
  if(m.type==='start'){startGame();return}
@@ -43,7 +44,7 @@ function connectToLobby(onReady){
   initPeer(temp,()=>{
     $('netLabel').textContent='Verbinde…';
     S.conn=S.peer.connect(LOBBY_ID,{reliable:true});
-    S.conn.on('open',()=>{if(onReady)onReady();});
+    S.conn.on('open',()=>{send(S.conn,{type:'observe'});if(onReady)onReady();});
     S.conn.on('data',raw=>{
       let m;try{m=typeof raw==='string'?JSON.parse(raw):raw}catch{return}
       if(m.type==='state'){
