@@ -204,8 +204,14 @@ function legal(id,r){
   // piece in the house, it may remain on A; the player is not forced to clear A
   // immediately just because the 6 was used to bring that last home piece out.
   if(r===6&&home.length){
-    if(onStart>=0 && home.length>1){
-      return canLand(p,onStart,r)?[onStart]:[];
+    // If a home piece is waiting and A/start is occupied by one of our own
+    // pieces, the 6 must be used to clear A first. This also applies when
+    // the waiting piece is the LAST piece in the house (e.g. after one of
+    // our pieces was captured). Only if the A-piece is blocked by another
+    // own piece may a different legal own piece be chosen.
+    if(onStart>=0){
+      if(canLand(p,onStart,r)) return [onStart];
+      return arr.map((x,i)=>x===-1?null:(i===onStart?null:(canLand(p,i,r)?i:null))).filter(x=>x!==null);
     }
     return home.filter(i=>canLand(p,i,r));
   }
