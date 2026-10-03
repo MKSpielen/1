@@ -10,7 +10,7 @@ const COLORS={
 const TRACK=[[842,222],[842,314],[842,406],[922,452],[1002,498],[1082,452],[1162,406],[1208,486],[1254,566],[1174,612],[1094,658],[1094,750],[1094,842],[1174,888],[1254,934],[1208,1014],[1162,1094],[1082,1048],[1002,1002],[922,1048],[842,1094],[842,1186],[842,1278],[750,1278],[658,1278],[658,1186],[658,1094],[578,1048],[498,1002],[418,1048],[338,1094],[292,1014],[246,934],[326,888],[406,842],[406,750],[406,658],[326,612],[246,566],[292,486],[338,406],[418,452],[498,498],[578,452],[658,406],[658,314],[658,222],[750,222]];
 const KEYS=Object.keys(COLORS), $=id=>document.getElementById(id);
 const LOBBY_ID='maedn6-global-lobby-v1';
-const S={room:null,host:false,peer:null,conn:null,myId:null,connections:[],players:[],phase:'lobby',turn:0,dice:null,lastDice:null,diceOwner:null,pawns:{},opening:{order:[],index:0,results:{}},houseRolls:0,joinPending:false,lobbyKnown:false};
+const S={room:null,host:false,peer:null,conn:null,myId:null,connections:[],players:[],phase:'lobby',turn:0,dice:null,lastDice:null,diceOwner:null,pawns:{},opening:{order:[],index:0,results:{}},houseRolls:0,priorityStart:false,joinPending:false,lobbyKnown:false};
 const colorChoices=$('colorChoices');
 KEYS.forEach(k=>{const b=document.createElement('button');b.type='button';b.className='color-choice';b.dataset.color=k;const dot=document.createElement('span');dot.className='color-dot'+(k==='black'?' black':'');dot.style.background=COLORS[k].hex;const label=document.createElement('span');label.textContent=COLORS[k].name;b.append(dot,label);b.onclick=()=>selectColor(k);colorChoices.append(b)});
 function selectColor(k){if(!COLORS[k])return;const current=$('color').value;const mine=me();const taken=S.players.some(p=>p.color===k&&p.id!==S.myId);if(taken)return;if(mine){if(S.phase==='lobby'){if(S.host){if(colorFree(k,mine.id)){mine.color=k;S.pawns[mine.id]=basePawns();broadcast()}}else if(S.conn&&S.conn.open){send(S.conn,{type:'color',id:S.myId,color:k})}else return}}$('color').value=k;updateColorChoices();if(current!==k)render()}
@@ -23,8 +23,8 @@ function colorFree(k,except){return !S.players.some(p=>p.color===k&&p.id!==excep
 function me(){return S.players.find(p=>p.id===S.myId)}
 function basePawns(){return [-1,-1,-1,-1]}
 function createPlayer(id,name,color,host=false){return{id,name:String(name||'Spieler').trim().slice(0,18)||'Spieler',color,host}}
-function snapshot(){return{room:S.room,players:S.players,phase:S.phase,turn:S.turn,dice:S.dice,lastDice:S.lastDice,diceOwner:S.diceOwner,pawns:S.pawns,opening:S.opening,houseRolls:S._houseRolls||0}}
-function apply(s,reveal=true){S.room=s.room;S.players=s.players||[];S.phase=s.phase||'lobby';S.turn=Number.isInteger(s.turn)?s.turn:0;S.dice=s.dice==null?null:Number(s.dice);S.lastDice=s.lastDice==null?null:Number(s.lastDice);S.diceOwner=s.diceOwner||null;S.pawns=s.pawns||{};S.opening=s.opening||{order:[],index:0,results:{}};S._houseRolls=Number.isInteger(s.houseRolls)?s.houseRolls:0;if(reveal)showGame();render()}
+function snapshot(){return{room:S.room,players:S.players,phase:S.phase,turn:S.turn,dice:S.dice,lastDice:S.lastDice,diceOwner:S.diceOwner,pawns:S.pawns,opening:S.opening,houseRolls:S._houseRolls||0,priorityStart:!!S.priorityStart}}
+function apply(s,reveal=true){S.room=s.room;S.players=s.players||[];S.phase=s.phase||'lobby';S.turn=Number.isInteger(s.turn)?s.turn:0;S.dice=s.dice==null?null:Number(s.dice);S.lastDice=s.lastDice==null?null:Number(s.lastDice);S.diceOwner=s.diceOwner||null;S.pawns=s.pawns||{};S.opening=s.opening||{order:[],index:0,results:{}};S._houseRolls=Number.isInteger(s.houseRolls)?s.houseRolls:0;S.priorityStart=!!s.priorityStart;if(reveal)showGame();render()}
 function send(c,m){if(c&&c.open)c.send(JSON.stringify(m))}
 function broadcast(){if(!S.host)return;const m={type:'state',state:snapshot()};S.connections.forEach(c=>send(c,m));render()}
 function initPeer(id,done,onError){if(typeof Peer==='undefined'){setupMsg('PeerJS konnte nicht geladen werden.');return}S.peer=new Peer(id);S.peer.on('open',pid=>{S.myId=pid;done()});S.peer.on('error',e=>{console.error(e);if(onError)onError(e);else{setupMsg(e.type==='peer-unavailable'?'Lobby nicht erreichbar.':'Verbindungsfehler: '+e.type);$('netLabel').textContent='Fehler'}});S.peer.on('disconnected',()=>{$('netLabel').textContent='Getrennt'})}
@@ -121,8 +121,8 @@ function joinLobby(){
 if(typeof Peer!=='undefined'){
   setTimeout(()=>connectToLobby(()=>{}),0);
 }
-function startGame(){if(S.phase!=='lobby'||S.players.length<2)return;if(!S.host){send(S.conn,{type:'start',id:S.myId});return}S.phase='opening';S.dice=null;S.lastDice=null;S.diceOwner=null;S.turn=0;S._houseRolls=0;S.opening={order:S.players.map(p=>p.id),index:0,results:{}};S.players.forEach(p=>S.pawns[p.id]=basePawns());gameMsg('Startwurf: Die niedrigste Zahl beginnt. Jede Person würfelt einmal.');broadcast()}
-function newGame(){if(!S.host){send(S.conn,{type:'newGame',id:S.myId});return}S.phase='lobby';S.dice=null;S.lastDice=null;S.diceOwner=null;S.turn=0;S._houseRolls=0;S.opening={order:[],index:0,results:{}};S.players.forEach(p=>S.pawns[p.id]=basePawns());broadcast();gameMsg('Neues Spiel: Bis zu 6 Spieler können in der Lobby sein.')}
+function startGame(){if(S.phase!=='lobby'||S.players.length<2)return;if(!S.host){send(S.conn,{type:'start',id:S.myId});return}S.phase='opening';S.dice=null;S.lastDice=null;S.diceOwner=null;S.turn=0;S._houseRolls=0;S.priorityStart=false;S.opening={order:S.players.map(p=>p.id),index:0,results:{}};S.players.forEach(p=>S.pawns[p.id]=basePawns());gameMsg('Startwurf: Die niedrigste Zahl beginnt. Jede Person würfelt einmal.');broadcast()}
+function newGame(){if(!S.host){send(S.conn,{type:'newGame',id:S.myId});return}S.phase='lobby';S.dice=null;S.lastDice=null;S.diceOwner=null;S.turn=0;S._houseRolls=0;S.priorityStart=false;S.opening={order:[],index:0,results:{}};S.players.forEach(p=>S.pawns[p.id]=basePawns());broadcast();gameMsg('Neues Spiel: Bis zu 6 Spieler können in der Lobby sein.')}
 function die(){return 1+Math.floor(Math.random()*6)}
 // A figure's position is encoded as: -1 = home, 0..47 = track, 48..51 = goal 1..4.
 // progress() returns the exact number of steps already travelled from that player's A/start field.
@@ -183,12 +183,25 @@ function legal(id,r){
   // Exception requested for this game: if the piece being brought out is the LAST
   // piece in the house, it may remain on A; the player is not forced to clear A
   // immediately just because the 6 was used to bring that last home piece out.
+  // After a 6 has just been used, the start field has priority again on the
+  // following roll as long as at least one own piece is still in the house.
+  // If the start-piece is blocked by another own piece, any other legal own
+  // piece may be selected instead.
+  if(S.priorityStart && home.length && onStart>=0){
+    if(canLand(p,onStart,r)) return [onStart];
+    return arr.map((x,i)=>x===-1?null:(canLand(p,i,r)?i:null)).filter(x=>x!==null);
+  }
+
+  // A 6 must first bring a waiting home piece onto A while any B pieces remain.
+  // If A is already occupied and there are still other home pieces waiting,
+  // that A-piece has to be moved with the 6. This applies identically to ALL colors.
+  // Exception requested for this game: if the piece being brought out is the LAST
+  // piece in the house, it may remain on A; the player is not forced to clear A
+  // immediately just because the 6 was used to bring that last home piece out.
   if(r===6&&home.length){
     if(onStart>=0 && home.length>1){
       return canLand(p,onStart,r)?[onStart]:[];
     }
-    // If A is free, or this is the last home piece, the home piece itself is the
-    // mandatory 6-move. Other pieces may not be selected instead.
     return home.filter(i=>canLand(p,i,r));
   }
   return arr.map((x,i)=>x===-1?null:(canLand(p,i,r)?i:null)).filter(x=>x!==null)
@@ -196,8 +209,8 @@ function legal(id,r){
 function currentRollerId(){if(S.phase==='opening')return S.opening.order[S.opening.index]||null;if(S.phase==='playing')return S.players[S.turn]?.id||null;return null}
 function openingRoll(id){if(S.phase!=='opening'||id!==currentRollerId())return;const r=die();S.opening.results[id]=r;S.dice=r;S.lastDice=r;S.diceOwner=id;S.opening.index++;if(S.opening.index<S.opening.order.length){broadcast();return}const vals=S.opening.order.map(pid=>S.opening.results[pid]);const min=Math.min(...vals);const tied=S.opening.order.filter(pid=>S.opening.results[pid]===min);if(tied.length>1){S.opening.order=tied;S.opening.index=0;S.opening.results={};S.dice=null;S.diceOwner=null;gameMsg('Gleichstand bei der niedrigsten Zahl – nur diese Spieler würfeln erneut.');broadcast();return}S.turn=S.players.findIndex(p=>p.id===tied[0]);S.phase='playing';S.dice=null;S.diceOwner=null;gameMsg((S.players[S.turn]?.name||'Spieler')+' beginnt. Zum Herauskommen ist eine 6 nötig.');broadcast()}
 function roll(id){if(S.phase==='opening'){openingRoll(id);return}if(S.phase!=='playing'||id!==S.players[S.turn]?.id)return;const p=S.players[S.turn];const houseRetry=needsHouseRolls(p.id)&&S.dice!==null&&S.diceOwner===p.id&&S._houseRolls>0;if(S.dice!==null&&!houseRetry)return;const r=die();S.dice=r;S.lastDice=r;S.diceOwner=p.id;const moves=legal(p.id,r);if(moves.length===0){const canTryAgain=needsHouseRolls(p.id)&&r!==6;if(canTryAgain){S._houseRolls=(S._houseRolls||0)+1;if(S._houseRolls<3){gameMsg(p.name+' hat eine '+r+' gewürfelt – keine 6. Noch '+(3-S._houseRolls)+' Versuch'+(3-S._houseRolls===1?'':'e')+'.');broadcast();return}S.dice=null;S.diceOwner=null;S._houseRolls=0;nextTurn();gameMsg(p.name+' hat '+r+' gewürfelt. Keine 6 in drei Versuchen – '+(S.players[S.turn]?.name||'Der nächste Spieler')+' ist am Zug.');broadcast();return}S.dice=null;S.diceOwner=null;S._houseRolls=0;nextTurn();gameMsg(p.name+' kann mit dieser Zahl nicht ziehen.');broadcast();return}S._houseRolls=0;broadcast()}
-function move(i){if(S.phase!=='playing'||S.dice===null)return;const p=S.players[S.turn],arr=S.pawns[p.id]||basePawns(),r=S.dice;if(!Number.isInteger(i)||i<0||i>3||!legal(p.id,r).includes(i))return;const from=arr[i],to=target(p.color,from,r);arr[i]=to;S.pawns[p.id]=arr;if(to<48){occupied(to,p.id,i).forEach(o=>{S.pawns[o.p.id][o.i]=-1})}const won=arr.every(x=>x>=48);const extra=r===6&&!won;S.dice=null;S.diceOwner=null;if(won){S.phase='finished';gameMsg(p.name+' hat alle 4 Figuren im Ziel und gewinnt!');broadcast();return}if(extra){gameMsg(p.name+' hat eine 6 gewürfelt und darf erneut würfeln.')}else{nextTurn();gameMsg(S.players[S.turn]?.name+' ist am Zug.')}broadcast()}
-function nextTurn(){S.turn=(S.turn+1)%S.players.length;S._houseRolls=0}
+function move(i){if(S.phase!=='playing'||S.dice===null)return;const p=S.players[S.turn],arr=S.pawns[p.id]||basePawns(),r=S.dice;if(!Number.isInteger(i)||i<0||i>3||!legal(p.id,r).includes(i))return;const from=arr[i],to=target(p.color,from,r);arr[i]=to;S.pawns[p.id]=arr;if(to<48){occupied(to,p.id,i).forEach(o=>{S.pawns[o.p.id][o.i]=-1})}const won=arr.every(x=>x>=48);const extra=r===6&&!won;S.priorityStart=extra&&arr.some(x=>x===-1);S.dice=null;S.diceOwner=null;if(won){S.phase='finished';gameMsg(p.name+' hat alle 4 Figuren im Ziel und gewinnt!');broadcast();return}if(extra){gameMsg(p.name+' hat eine 6 gewürfelt und darf erneut würfeln.')}else{nextTurn();gameMsg(S.players[S.turn]?.name+' ist am Zug.')}broadcast()}
+function nextTurn(){S.turn=(S.turn+1)%S.players.length;S._houseRolls=0;S.priorityStart=false}
 function showGame(){$('setup').classList.add('hidden');$('game').classList.remove('hidden');$('roomLabel').textContent='Gemeinsame Lobby'}
 function coords(p,i){if(i<48)return TRACK[i];return COLORS[p.color].goal[i-48]}
 function updateColorChoices(){
