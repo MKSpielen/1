@@ -1,4 +1,69 @@
 (()=>{'use strict';
+
+// Static GitHub Pages access gate. This is a casual access barrier, not server-side authentication.
+const GAME_AUTH_KEY='maedn6-game-password-v3';
+const ADMIN_AUTH_KEY='maedn6-admin-password-v3';
+const DEFAULT_PASSWORD_HASH='03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4';
+const AUTH_SESSION_KEY='maedn6-game-unlocked-v3';
+const ADMIN_SESSION_KEY='maedn6-admin-unlocked-v3';
+const authHash=async password=>{
+  const data=new TextEncoder().encode(String(password));
+  if(globalThis.crypto?.subtle){
+    const digest=await crypto.subtle.digest('SHA-256',data);
+    return Array.from(new Uint8Array(digest)).map(b=>b.toString(16).padStart(2,'0')).join('');
+  }
+  // GitHub Pages is HTTPS, so Web Crypto is normally available. If a local file preview
+  // has no Web Crypto, use the small built-in SHA-256 implementation below.
+  return sha256Fallback(String(password));
+};
+function sha256Fallback(str){
+  const K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+  const bytes=unescape(encodeURIComponent(str)); let msg=[]; for(let i=0;i<bytes.length;i++)msg.push(bytes.charCodeAt(i));
+  const bitLen=msg.length*8; msg.push(0x80); while(msg.length%64!==56)msg.push(0); for(let i=7;i>=0;i--)msg.push(Math.floor(bitLen/2**(8*i))&255);
+  let h=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+  const rotr=(x,n)=>(x>>>n)|(x<<(32-n));
+  for(let o=0;o<msg.length;o+=64){let w=new Array(64);for(let i=0;i<16;i++)w[i]=((msg[o+4*i]<<24)|(msg[o+4*i+1]<<16)|(msg[o+4*i+2]<<8)|msg[o+4*i+3])>>>0;for(let i=16;i<64;i++){const a=rotr(w[i-15],7)^rotr(w[i-15],18)^(w[i-15]>>>3),b=rotr(w[i-2],17)^rotr(w[i-2],19)^(w[i-2]>>>10);w[i]=(w[i-16]+a+w[i-7]+b)>>>0}let [a,b,c,d,e,f,g,j]=h;for(let i=0;i<64;i++){const S1=rotr(e,6)^rotr(e,11)^rotr(e,25),ch=(e&f)^(~e&g),t1=(j+S1+ch+K[i]+w[i])>>>0,S0=rotr(a,2)^rotr(a,13)^rotr(a,22),maj=(a&b)^(a&c)^(b&c),t2=(S0+maj)>>>0;j=g;g=f;f=e;e=(d+t1)>>>0;d=c;c=b;b=a;a=(t1+t2)>>>0}h=[(h[0]+a)>>>0,(h[1]+b)>>>0,(h[2]+c)>>>0,(h[3]+d)>>>0,(h[4]+e)>>>0,(h[5]+f)>>>0,(h[6]+g)>>>0,(h[7]+j)>>>0]}
+  return h.map(x=>x.toString(16).padStart(8,'0')).join('');
+}
+const $=id=>document.getElementById(id);
+const storedPasswordHash=(key)=>{try{return localStorage.getItem(key)||DEFAULT_PASSWORD_HASH}catch{return DEFAULT_PASSWORD_HASH}};
+const setStoredPasswordHash=(key,h)=>{try{localStorage.setItem(key,h);return true}catch{return false}};
+const isUnlocked=()=>{try{return sessionStorage.getItem(AUTH_SESSION_KEY)==='1'}catch{return false}};
+const isAdminUnlocked=()=>{try{return sessionStorage.getItem(ADMIN_SESSION_KEY)==='1'}catch{return false}};
+const unlock=()=>{try{sessionStorage.setItem(AUTH_SESSION_KEY,'1')}catch{};document.getElementById('passwordGate')?.classList.add('hidden');document.getElementById('setup')?.classList.remove('hidden')};
+const setupAuth=()=>{
+  const gate=document.getElementById('passwordGate'), form=document.getElementById('passwordForm'), input=document.getElementById('accessPassword'), msg=document.getElementById('passwordMsg');
+  if(!gate||!form)return;
+  if(isUnlocked()){unlock();return}
+  form.addEventListener('submit',async e=>{e.preventDefault();msg.textContent='Prüfe Passwort…';try{const ok=(await authHash(input.value))===storedPasswordHash(GAME_AUTH_KEY);if(ok){input.value='';msg.textContent='';unlock()}else{msg.textContent='Falsches Spiel-Passwort.';input.select()}}catch(err){console.error(err);msg.textContent='Passwortprüfung fehlgeschlagen.'}});
+};
+setupAuth();
+
+// Admin access is wired immediately after the password gate, so it remains usable
+// even if an unrelated game/network component has a startup problem.
+const adminLoginButton=$('adminLoginButton'),adminLoginModal=$('adminLoginModal'),adminLoginForm=$('adminLoginForm'),adminLoginMsg=$('adminLoginMsg'),cancelAdminLogin=$('cancelAdminLogin');
+const adminPanelModal=$('adminPanelModal'),adminPanelForm=$('adminPanelForm'),adminPanelMsg=$('adminPanelMsg'),cancelAdminPanel=$('cancelAdminPanel');
+function openAdminLogin(){adminLoginMsg.textContent='';adminLoginForm?.reset();adminLoginModal?.classList.remove('hidden');setTimeout(()=>$('adminLoginPassword')?.focus(),0)}
+function closeAdminLogin(){adminLoginModal?.classList.add('hidden')}
+function openAdminPanel(){if(!isAdminUnlocked())return openAdminLogin();adminPanelMsg.textContent='';adminPanelForm?.reset();adminPanelModal?.classList.remove('hidden')}
+function closeAdminPanel(){adminPanelModal?.classList.add('hidden')}
+adminLoginButton?.addEventListener('click',openAdminLogin);
+cancelAdminLogin?.addEventListener('click',closeAdminLogin);
+adminPanelModal?.addEventListener('click',e=>{if(e.target===adminPanelModal)closeAdminPanel()});
+cancelAdminPanel?.addEventListener('click',closeAdminPanel);
+adminLoginForm?.addEventListener('submit',async e=>{e.preventDefault();adminLoginMsg.textContent='Prüfe Admin-Passwort…';try{if((await authHash($('adminLoginPassword').value))!==storedPasswordHash(ADMIN_AUTH_KEY)){adminLoginMsg.textContent='Falsches Admin-Passwort.';return}try{sessionStorage.setItem(ADMIN_SESSION_KEY,'1')}catch{}closeAdminLogin();openAdminPanel()}catch(err){console.error(err);adminLoginMsg.textContent='Admin-Anmeldung fehlgeschlagen.'}});
+adminPanelForm?.addEventListener('submit',async e=>{
+  e.preventDefault();adminPanelMsg.textContent='';
+  const gp=$('newGamePassword').value,gp2=$('newGamePassword2').value,ap=$('newAdminPassword').value,ap2=$('newAdminPassword2').value;
+  if(!gp&&!ap){adminPanelMsg.textContent='Bitte mindestens eines der beiden Passwörter eintragen.';return}
+  if(gp&&(gp.length<4||gp!==gp2)){adminPanelMsg.textContent='Das neue Spiel-Passwort muss mindestens 4 Zeichen haben und zweimal gleich eingegeben werden.';return}
+  if(ap&&(ap.length<4||ap!==ap2)){adminPanelMsg.textContent='Das neue Admin-Passwort muss mindestens 4 Zeichen haben und zweimal gleich eingegeben werden.';return}
+  try{
+    if(gp&&!setStoredPasswordHash(GAME_AUTH_KEY,await authHash(gp)))throw new Error('game');
+    if(ap&&!setStoredPasswordHash(ADMIN_AUTH_KEY,await authHash(ap)))throw new Error('admin');
+    adminPanelMsg.textContent='Passwortänderung gespeichert.';adminPanelForm.reset();setTimeout(closeAdminPanel,900);
+  }catch(err){console.error(err);adminPanelMsg.textContent='Passwort konnte nicht gespeichert werden.'}
+});
 const COLORS={
  red:{name:'Rot',hex:'#ef1111',start:0,home:[[1280,110],[1280,220],[1390,110],[1390,220]],goal:[[750,314],[750,394],[750,474],[750,554]]},
  green:{name:'Grün',hex:'#009b00',start:8,home:[[1280,695],[1280,805],[1390,695],[1390,805]],goal:[[1128,532],[1059,572],[990,612],[921,652]]},
@@ -8,7 +73,7 @@ const COLORS={
  blue:{name:'Blau',hex:'#0090ff',start:40,home:[[110,110],[110,220],[220,110],[220,220]],goal:[[372,532],[441,572],[510,612],[579,652]]}
 };
 const TRACK=[[842,222],[842,314],[842,406],[922,452],[1002,498],[1082,452],[1162,406],[1208,486],[1254,566],[1174,612],[1094,658],[1094,750],[1094,842],[1174,888],[1254,934],[1208,1014],[1162,1094],[1082,1048],[1002,1002],[922,1048],[842,1094],[842,1186],[842,1278],[750,1278],[658,1278],[658,1186],[658,1094],[578,1048],[498,1002],[418,1048],[338,1094],[292,1014],[246,934],[326,888],[406,842],[406,750],[406,658],[326,612],[246,566],[292,486],[338,406],[418,452],[498,498],[578,452],[658,406],[658,314],[658,222],[750,222]];
-const KEYS=Object.keys(COLORS), $=id=>document.getElementById(id);
+const KEYS=Object.keys(COLORS);
 const LOBBY_ID='maedn6-global-lobby-v1';
 const S={room:null,host:false,peer:null,conn:null,myId:null,connections:[],players:[],phase:'lobby',turn:0,dice:null,lastDice:null,diceOwner:null,pawns:{},opening:{order:[],index:0,results:{}},houseRolls:0,priorityStart:false,joinPending:false,lobbyKnown:false};
 const colorChoices=$('colorChoices');
@@ -245,8 +310,8 @@ function updateColorChoices(){
 }
 function render(){if($('game').classList.contains('hidden'))return;const m=me(),p=S.players[S.turn];$('count').textContent=S.players.length+'/6';$('turnLabel').textContent=S.phase==='opening'?'Startwurf':S.phase==='playing'?'Am Zug: '+(p?.name||'–'):S.phase==='finished'?'Spiel beendet':'Lobby';$('die').textContent=S.lastDice??'–';if(m){$('color').value=m.color;updateColorChoices()}
 let text='';if(S.phase==='lobby')text='Lobby – der Host startet ab 2 Spielern.';else if(S.phase==='opening'){const rid=currentRollerId();text=rid===m?.id?'Du bist dran: würfle für den Start.':'Warte auf '+(S.players.find(x=>x.id===rid)?.name||'Spieler')+'.';if(S.dice!==null)text+=' Letzter Startwurf: '+S.dice+'.'}else if(S.phase==='playing'){if(needsHouseRolls(m?.id||'')&&S.dice!==null&&S.diceOwner===m?.id&&S._houseRolls>0){text=S.dice===6?'6 – Figur kann aus dem Haus.':'Keine 6 – Wurf '+S._houseRolls+'/3. Noch '+(3-S._houseRolls)+' Versuch'+(3-S._houseRolls===1?'':'e')+'.';}else if(S.dice!==null)text=S.diceOwner===m?.id?'Du hast eine '+S.dice+' gewürfelt. Wähle eine Figur.':(S.players.find(x=>x.id===S.diceOwner)?.name||'Spieler')+' hat '+S.dice+' gewürfelt.';else text=p?.id===m?.id?'Du bist dran.':'Warte auf '+(p?.name||'Spieler')+'.'}else text='Spiel beendet.';$('diceText').textContent=text;
-const canRoll=(S.phase==='opening'&&currentRollerId()===m?.id)||(S.phase==='playing'&&p?.id===m?.id&&(S.dice===null||(needsHouseRolls(m.id)&&S.diceOwner===m.id&&S._houseRolls>0)));$('roll').disabled=!canRoll;$('roll').textContent=S.phase==='opening'?'Startwurf':'Würfeln';$('start').disabled=!(S.phase==='lobby'&&S.players.length>=2);$('start').classList.toggle('hidden',S.phase!=='lobby');$('newGame').classList.toggle('hidden',false);$('lobbyHint').textContent=S.phase==='lobby'?'Ab 2 Spielern kann jeder Spieler den Startwurf starten.':S.phase==='opening'?'Jede Person würfelt einmal. Die niedrigste Zahl beginnt.':S.phase==='playing'?'Eine Figur kommt nur mit 6 aus dem Haus.':'Spiel beendet.';
+const canRoll=(S.phase==='opening'&&currentRollerId()===m?.id)||(S.phase==='playing'&&p?.id===m?.id&&(S.dice===null||(needsHouseRolls(m.id)&&S.diceOwner===m.id&&S._houseRolls>0)));$('roll').disabled=!canRoll;$('roll').textContent=S.phase==='opening'?'Startwurf':'Würfeln';$('start').disabled=!(S.phase==='lobby'&&S.players.length>=2);$('start').classList.toggle('hidden',S.phase!=='lobby');$('newGame').classList.toggle('hidden',false);$('changePassword').classList.remove('hidden');$('lobbyHint').textContent=S.phase==='lobby'?'Ab 2 Spielern kann jeder Spieler den Startwurf starten.':S.phase==='opening'?'Jede Person würfelt einmal. Die niedrigste Zahl beginnt.':S.phase==='playing'?'Eine Figur kommt nur mit 6 aus dem Haus.':'Spiel beendet.';
 $('players').innerHTML='';S.players.forEach((x,idx)=>{const row=document.createElement('div');row.className='player-row';const sw=document.createElement('span');sw.className='swatch';sw.style.background=COLORS[x.color].hex;const n=document.createElement('span');n.className='player-name';n.textContent=x.name+(S.phase==='opening'&&currentRollerId()===x.id?' 🎲':S.phase==='playing'&&idx===S.turn?' 🎲':'');const meta=document.createElement('span');meta.className='player-meta';if(S.phase==='opening'&&S.opening.results[x.id]!=null)meta.textContent='Start: '+S.opening.results[x.id];else meta.textContent=x.id===S.myId?'Du':(x.host?'Host':'');row.append(sw,n,meta);$('players').append(row)});renderTokens()}
 function renderTokens(){const layer=$('tokenLayer');layer.innerHTML='';for(const p of S.players){const arr=S.pawns[p.id]||basePawns();arr.forEach((pos,i)=>{const [x,y]=pos===-1?COLORS[p.color].home[i]:coords(p,pos);const b=document.createElement('button');b.type='button';b.className='token'+(p.color==='black'?' black':'');b.style.left=(x/1500*100)+'%';b.style.top=(y/1500*100)+'%';b.style.background=COLORS[p.color].hex;b.textContent=i+1;b.title=p.name+' – Figur '+(i+1)+(pos===-1?' – Haus':'');const can=S.phase==='playing'&&S.dice!==null&&p.id===S.myId&&S.players[S.turn]?.id===S.myId&&legal(p.id,S.dice).includes(i);if(can){b.classList.add('selectable');b.onclick=()=>S.host?move(i):send(S.conn,{type:'move',id:S.myId,pawn:i})}layer.append(b)})}}
-$('join').onclick=joinLobby;$('start').onclick=startGame;$('newGame').onclick=newGame;$('roll').onclick=()=>S.host?roll(S.myId):send(S.conn,{type:'roll',id:S.myId});
+$('changePassword').onclick=openAdminLogin;$('join').onclick=joinLobby;$('start').onclick=startGame;$('newGame').onclick=newGame;$('roll').onclick=()=>S.host?roll(S.myId):send(S.conn,{type:'roll',id:S.myId});
 })();

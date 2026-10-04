@@ -9,7 +9,20 @@
 </head>
 <body>
 <main class="app">
-  <section id="setup" class="setup-card">
+  <section id="passwordGate" class="password-gate">
+    <div class="password-card">
+      <h1>Spielzugang</h1>
+      <p>Bitte Passwort eingeben, um das Spiel zu öffnen.</p>
+      <form id="passwordForm" class="password-form">
+        <label for="accessPassword">Spiel-Passwort</label>
+        <input id="accessPassword" type="password" autocomplete="current-password" inputmode="text" required>
+        <button type="submit" class="primary">Spiel öffnen</button>
+      </form>
+      <button id="adminLoginButton" type="button" class="secondary full">Adminbereich</button>
+      <p id="passwordMsg" class="status" aria-live="polite"></p>
+    </div>
+  </section>
+  <section id="setup" class="setup-card hidden">
     <h1>Mensch ärgere Dich nicht</h1>
     <p>Online mit 2–6 Spielern · klassische 6-Spieler-Vorlage</p>
     <div class="setup-grid">
@@ -42,6 +55,7 @@
         <div id="players"></div>
         <button id="start" class="primary full" disabled>Spiel starten</button>
         <button id="newGame" class="secondary full hidden">Neues Spiel</button>
+        <button id="changePassword" class="secondary full hidden" type="button">Adminbereich</button>
         <p id="lobbyHint" class="hint">Weitere Spieler können beitreten.</p>
         <p id="gameMsg" class="game-msg" aria-live="polite"></p>
       </aside>
@@ -60,6 +74,65 @@
       </div>
     </div>
   </section>
+
+
+  <div id="adminLoginModal" class="password-modal hidden" role="dialog" aria-modal="true" aria-labelledby="adminLoginTitle">
+    <div class="password-card">
+      <h2 id="adminLoginTitle">Adminbereich</h2>
+      <p>Hier kannst du das Admin- und das Spiel-Passwort verwalten.</p>
+      <form id="adminLoginForm" class="password-form">
+        <label for="adminLoginPassword">Admin-Passwort</label>
+        <input id="adminLoginPassword" type="password" autocomplete="current-password" required>
+        <div class="password-actions">
+          <button type="submit" class="primary">Anmelden</button>
+          <button id="cancelAdminLogin" type="button" class="secondary">Abbrechen</button>
+        </div>
+      </form>
+      <p id="adminLoginMsg" class="status" aria-live="polite"></p>
+    </div>
+  </div>
+
+  <div id="adminPanelModal" class="password-modal hidden" role="dialog" aria-modal="true" aria-labelledby="adminPanelTitle">
+    <div class="password-card">
+      <h2 id="adminPanelTitle">Adminbereich</h2>
+      <p>Beide Passwörter werden auf diesem Gerät gespeichert.</p>
+      <form id="adminPanelForm" class="password-form">
+        <label for="newGamePassword">Neues Spiel-Passwort</label>
+        <input id="newGamePassword" type="password" autocomplete="new-password" minlength="4" placeholder="Leer lassen = nicht ändern">
+        <label for="newGamePassword2">Spiel-Passwort wiederholen</label>
+        <input id="newGamePassword2" type="password" autocomplete="new-password" minlength="4" placeholder="Leer lassen = nicht ändern">
+        <label for="newAdminPassword">Neues Admin-Passwort</label>
+        <input id="newAdminPassword" type="password" autocomplete="new-password" minlength="4" placeholder="Leer lassen = nicht ändern">
+        <label for="newAdminPassword2">Admin-Passwort wiederholen</label>
+        <input id="newAdminPassword2" type="password" autocomplete="new-password" minlength="4" placeholder="Leer lassen = nicht ändern">
+        <div class="password-actions">
+          <button type="submit" class="primary">Passwörter speichern</button>
+          <button id="cancelAdminPanel" type="button" class="secondary">Schließen</button>
+        </div>
+      </form>
+      <p id="adminPanelMsg" class="status" aria-live="polite"></p>
+    </div>
+  </div>
+
+  <div id="passwordModal" class="password-modal hidden" role="dialog" aria-modal="true" aria-labelledby="passwordModalTitle">
+    <div class="password-card">
+      <h2 id="passwordModalTitle">Admin-Passwort ändern</h2>
+      <p>Dieser Dialog wird vom neuen Adminbereich verwaltet.</p>
+      <form id="changePasswordForm" class="password-form">
+        <label for="currentAdminPassword">Aktuelles Passwort</label>
+        <input id="currentAdminPassword" type="password" autocomplete="current-password" required>
+        <label for="newAdminPassword">Neues Passwort</label>
+        <input id="newAdminPassword" type="password" autocomplete="new-password" minlength="4" required>
+        <label for="newAdminPassword2">Neues Passwort wiederholen</label>
+        <input id="newAdminPassword2" type="password" autocomplete="new-password" minlength="4" required>
+        <div class="password-actions">
+          <button type="submit" class="primary">Passwort speichern</button>
+          <button id="cancelPasswordChange" type="button" class="secondary">Abbrechen</button>
+        </div>
+      </form>
+      <p id="changePasswordMsg" class="status" aria-live="polite"></p>
+    </div>
+  </div>
 </main>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="app.js"></script>
