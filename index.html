@@ -129,20 +129,22 @@
 
 <script src="https://unpkg.com"></script>
 <script src="app.js"></script>
+
 <!-- SUPABASE PASSWORT LOGIK -->
 <script>
     // CONFIG: Trage hier deine echten Supabase Daten ein!
     const SUPABASE_URL = "https://jyfvqnxesapfpscqpgzt.supabase.co";
     const SUPABASE_ANON_KEY = "sb_publishable_gVM4AyknTEMEZuRDx9YiHg_MyiZJtNy";
+
     const supabase = Supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     let currentMode = "user"; 
 
-    // Prüfen, ob das Passwort bereits im Browser gespeichert ist
-    window.onload = async () => {
+    // Beim Laden wird NUR geschaut, ob lokal ein Passwort liegt. Keine blockierende Web-Schleife mehr!
+    window.onload = () => {
         const savedPassword = localStorage.getItem('site_password');
         if (savedPassword && savedPassword.trim() !== "") {
             document.getElementById('login-input').value = savedPassword;
-            await handleLogin();
+            handleLogin();
         }
     };
 
@@ -171,6 +173,8 @@
             return;
         }
 
+        errorEl.innerText = "Prüfe Passwort...";
+
         try {
             const { data, error } = await supabase
                 .from('website_passwords')
@@ -179,12 +183,13 @@
                 .single();
 
             if (error || !data) {
-                errorEl.innerText = "Verbindungsfehler oder Tabelle unvollständig.";
+                errorEl.innerText = "Fehler: Keine Antwort von der Datenbank (CORS Blockade am Handy?)";
                 console.error(error);
                 return;
             }
 
             if (enteredPassword === data.password_hash) {
+                errorEl.innerText = "";
                 if (currentMode === 'user') {
                     localStorage.setItem('site_password', enteredPassword);
                 }
@@ -201,8 +206,3 @@
                 errorEl.innerText = "Falsches Passwort! Bitte versuche es erneut.";
             }
         } catch (e) {
-            errorEl.innerText = "Kritischer Fehler bei der Abfrage.";
-            console.error(e);
-        }
-    }
-
