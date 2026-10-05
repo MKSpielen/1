@@ -6,23 +6,70 @@
 <meta name="theme-color" content="#e8d8b8">
 <title>Mensch ärgere Dich nicht – Online</title>
 <link rel="stylesheet" href="style.css">
+
+<!-- Supabase Bibliothek laden -->
+<script src="https://jsdelivr.net"></script>
+
+<style>
+/* CSS, um das Spiel oder den Admin-Bereich zu verstecken, bis man eingeloggt ist */
+.auth-hidden { display: none !important; }
+
+/* Styles für das Login-Overlay, das über der Seite liegt */
+#login-overlay { 
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+    background: #ffffff; z-index: 99999; display: flex; 
+    justify-content: center; align-items: center; font-family: Arial, sans-serif;
+}
+.login-card { border: 1px solid #ddd; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 100%; max-width: 360px; box-sizing: border-box; }
+.login-card input, .login-card button { display: block; width: 100%; margin: 12px 0; padding: 12px; box-sizing: border-box; font-size: 16px; border-radius: 4px; }
+.login-card button { background-color: #0070f3; color: white; border: none; font-weight: bold; cursor: pointer; }
+.login-card button:hover { background-color: #0051a8; }
+.nav-links { display: flex; justify-content: space-between; margin-top: 15px; }
+.nav-links a { color: #0070f3; text-decoration: none; cursor: pointer; font-size: 14px; }
+</style>
 </head>
 <body>
-<main class="app">
-  <section id="passwordGate" class="password-gate">
-    <div class="password-card">
-      <h1>Spielzugang</h1>
-      <p>Bitte Passwort eingeben, um das Spiel zu öffnen.</p>
-      <form id="passwordForm" class="password-form">
-        <label for="accessPassword">Spiel-Passwort</label>
-        <input id="accessPassword" type="password" autocomplete="current-password" inputmode="text" required>
-        <button type="submit" class="primary">Spiel öffnen</button>
-      </form>
-      <button id="adminLoginButton" type="button" class="secondary full">Adminbereich</button>
-      <p id="passwordMsg" class="status" aria-live="polite"></p>
+
+<!-- DAS LOGIN-OVERLAY (Sperrbildschirm) -->
+<div id="login-overlay">
+    <div class="login-card">
+        <h2 id="login-title">Seiten-Zugang</h2>
+        <input type="password" id="login-input" placeholder="Passwort eingeben">
+        <button onclick="handleLogin()">Einloggen</button>
+        <p id="login-error" style="color: red; font-size: 14px; margin: 5px 0 0 0;"></p>
+        
+        <div class="nav-links">
+            <a id="link-toggle-admin" onclick="switchLoginMode('admin')">Als Admin einloggen</a>
+            <a id="link-toggle-user" class="auth-hidden" onclick="switchLoginMode('user')">Zum normalen Login</a>
+        </div>
     </div>
-  </section>
-  <section id="setup" class="setup-card hidden">
+</div>
+
+<!-- DAS ADMIN DASHBOARD -->
+<div id="view-admin" class="auth-hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #fff5f5; z-index: 100000; padding: 40px; font-family: Arial, sans-serif; box-sizing: border-box; overflow-y: auto;">
+    <div style="max-width: 500px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; border: 1px solid #feb2b2; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
+        <h2>🛠️ Admin-Bereich</h2>
+        <p>Hier kannst du die Passwörter einzeln ändern:</p>
+        <hr style="border: 0; border-top: 1px solid #feb2b2; margin: 20px 0;">
+        
+        <h3>Normales Passwort ändern</h3>
+        <input type="text" id="new-user-pw" placeholder="Neues Passwort für Nutzer" style="width:100%; padding:10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+        <button onclick="changePassword('user')" style="width:100%; padding:12px; background:#0070f3; color:white; border:none; font-weight:bold; border-radius: 4px; cursor: pointer;">Nutzer-Passwort speichern</button>
+
+        <hr style="border: 0; border-top: 1px solid #feb2b2; margin: 20px 0;">
+
+        <h3>Admin-Passwort ändern</h3>
+        <input type="text" id="new-admin-pw" placeholder="Neues Passwort für Admin" style="width:100%; padding:10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box;">
+        <button onclick="changePassword('admin')" style="width:100%; padding:12px; background:#e53e3e; color:white; border:none; font-weight:bold; border-radius: 4px; cursor: pointer;">Admin-Passwort speichern</button>
+
+        <button onclick="logout()" style="width:100%; padding:10px; background:#666; color:white; border:none; margin-top: 30px; border-radius: 4px; cursor: pointer;">Abmelden & Seite sperren</button>
+    </div>
+</div>
+
+<!-- SPIELBEREICH (Standardmäßig versteckt mit .auth-hidden) -->
+<div id="game-wrapper" class="auth-hidden">
+<main class="app">
+  <section id="setup" class="setup-card">
     <h1>Mensch ärgere Dich nicht</h1>
     <p>Online mit 2–6 Spielern · klassische 6-Spieler-Vorlage</p>
     <div class="setup-grid">
@@ -55,7 +102,6 @@
         <div id="players"></div>
         <button id="start" class="primary full" disabled>Spiel starten</button>
         <button id="newGame" class="secondary full hidden">Neues Spiel</button>
-        <button id="changePassword" class="secondary full hidden" type="button">Adminbereich</button>
         <p id="lobbyHint" class="hint">Weitere Spieler können beitreten.</p>
         <p id="gameMsg" class="game-msg" aria-live="polite"></p>
       </aside>
@@ -74,67 +120,92 @@
       </div>
     </div>
   </section>
-
-
-  <div id="adminLoginModal" class="password-modal hidden" role="dialog" aria-modal="true" aria-labelledby="adminLoginTitle">
-    <div class="password-card">
-      <h2 id="adminLoginTitle">Adminbereich</h2>
-      <p>Hier kannst du das Admin- und das Spiel-Passwort verwalten.</p>
-      <form id="adminLoginForm" class="password-form">
-        <label for="adminLoginPassword">Admin-Passwort</label>
-        <input id="adminLoginPassword" type="password" autocomplete="current-password" required>
-        <div class="password-actions">
-          <button type="submit" class="primary">Anmelden</button>
-          <button id="cancelAdminLogin" type="button" class="secondary">Abbrechen</button>
-        </div>
-      </form>
-      <p id="adminLoginMsg" class="status" aria-live="polite"></p>
-    </div>
-  </div>
-
-  <div id="adminPanelModal" class="password-modal hidden" role="dialog" aria-modal="true" aria-labelledby="adminPanelTitle">
-    <div class="password-card">
-      <h2 id="adminPanelTitle">Adminbereich</h2>
-      <p>Beide Passwörter werden auf diesem Gerät gespeichert.</p>
-      <form id="adminPanelForm" class="password-form">
-        <label for="newGamePassword">Neues Spiel-Passwort</label>
-        <input id="newGamePassword" type="password" autocomplete="new-password" minlength="4" placeholder="Leer lassen = nicht ändern">
-        <label for="newGamePassword2">Spiel-Passwort wiederholen</label>
-        <input id="newGamePassword2" type="password" autocomplete="new-password" minlength="4" placeholder="Leer lassen = nicht ändern">
-        <label for="newAdminPassword">Neues Admin-Passwort</label>
-        <input id="newAdminPassword" type="password" autocomplete="new-password" minlength="4" placeholder="Leer lassen = nicht ändern">
-        <label for="newAdminPassword2">Admin-Passwort wiederholen</label>
-        <input id="newAdminPassword2" type="password" autocomplete="new-password" minlength="4" placeholder="Leer lassen = nicht ändern">
-        <div class="password-actions">
-          <button type="submit" class="primary">Passwörter speichern</button>
-          <button id="cancelAdminPanel" type="button" class="secondary">Schließen</button>
-        </div>
-      </form>
-      <p id="adminPanelMsg" class="status" aria-live="polite"></p>
-    </div>
-  </div>
-
-  <div id="passwordModal" class="password-modal hidden" role="dialog" aria-modal="true" aria-labelledby="passwordModalTitle">
-    <div class="password-card">
-      <h2 id="passwordModalTitle">Admin-Passwort ändern</h2>
-      <p>Dieser Dialog wird vom neuen Adminbereich verwaltet.</p>
-      <form id="changePasswordForm" class="password-form">
-        <label for="currentAdminPassword">Aktuelles Passwort</label>
-        <input id="currentAdminPassword" type="password" autocomplete="current-password" required>
-        <label for="newAdminPassword">Neues Passwort</label>
-        <input id="newAdminPassword" type="password" autocomplete="new-password" minlength="4" required>
-        <label for="newAdminPassword2">Neues Passwort wiederholen</label>
-        <input id="newAdminPassword2" type="password" autocomplete="new-password" minlength="4" required>
-        <div class="password-actions">
-          <button type="submit" class="primary">Passwort speichern</button>
-          <button id="cancelPasswordChange" type="button" class="secondary">Abbrechen</button>
-        </div>
-      </form>
-      <p id="changePasswordMsg" class="status" aria-live="polite"></p>
-    </div>
-  </div>
 </main>
-<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+
+<footer style="text-align: center; padding: 20px 0;">
+    <button onclick="logout()" style="padding: 8px 16px; background: #666; color: white; border: none; border-radius: 4px; cursor: pointer;">Abmelden / Passwort löschen</button>
+</footer>
+</div> <!-- ENDE GAME WRAPPER -->
+
+<script src="https://unpkg.com"></script>
 <script src="app.js"></script>
-</body>
-</html>
+
+<!-- SUPABASE PASSWORT LOGIK -->
+<script>
+    // CONFIG: Trage hier deine echten Supabase Daten ein!
+    const SUPABASE_URL = "https://jyfvqnxesapfpscqpgzt.supabase.co";
+    const SUPABASE_ANON_KEY = "sb_publishable_gVM4AyknTEMEZuRDx9YiHg_MyiZJtNy";
+
+    const supabase = Supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    let currentMode = "user"; 
+
+    // Prüfen, ob das Passwort bereits im Browser gespeichert ist
+    window.onload = async () => {
+        const savedPassword = localStorage.getItem('site_password');
+        if (savedPassword) {
+            document.getElementById('login-input').value = savedPassword;
+            await handleLogin();
+        }
+    };
+
+    function switchLoginMode(mode) {
+        currentMode = mode;
+        document.getElementById('login-error').innerText = "";
+        document.getElementById('login-input').value = "";
+        
+        if (mode === 'admin') {
+            document.getElementById('login-title').innerText = "Admin-Login";
+            document.getElementById('link-toggle-admin').classList.add('auth-hidden');
+            document.getElementById('link-toggle-user').classList.remove('auth-hidden');
+        } else {
+            document.getElementById('login-title').innerText = "Seiten-Zugang";
+            document.getElementById('link-toggle-admin').classList.remove('auth-hidden');
+            document.getElementById('link-toggle-user').classList.add('auth-hidden');
+        }
+    }
+
+    async function handleLogin() {
+        const enteredPassword = document.getElementById('login-input').value;
+        const errorEl = document.getElementById('login-error');
+
+        const { data, error } = await supabase
+            .from('website_passwords')
+            .select('password_hash')
+            .eq('role', currentMode)
+            .single();
+
+        if (error || !data) {
+            errorEl.innerText = "Fehler bei der Verbindung zur Datenbank.";
+            return;
+        }
+
+        if (enteredPassword === data.password_hash) {
+            if (currentMode === 'user') {
+                localStorage.setItem('site_password', enteredPassword);
+            }
+
+            document.getElementById('login-overlay').classList.add('auth-hidden');
+            
+            if (currentMode === 'admin') {
+                document.getElementById('view-admin').classList.remove('auth-hidden');
+            } else {
+                document.getElementById('game-wrapper').classList.remove('auth-hidden');
+            }
+        } else {
+            localStorage.removeItem('site_password');
+            errorEl.innerText = "Falsches Passwort! Bitte versuche es erneut.";
+        }
+    }
+
+    async function changePassword(role) {
+        const inputId = role === 'user' ? 'new-user-pw' : 'new-admin-pw';
+        const newPassword = document.getElementById(inputId).value;
+
+        if (!newPassword) return alert("Bitte ein neues Passwort eintippen.");
+
+        const { error } = await supabase
+            .from('website_passwords')
+            .update({ password_hash: newPassword })
+            .eq('role', role);
+
+        if (error) {
