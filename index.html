@@ -129,20 +129,18 @@
 
 <script src="https://unpkg.com"></script>
 <script src="app.js"></script>
-
 <!-- SUPABASE PASSWORT LOGIK -->
 <script>
     // CONFIG: Trage hier deine echten Supabase Daten ein!
     const SUPABASE_URL = "https://jyfvqnxesapfpscqpgzt.supabase.co";
     const SUPABASE_ANON_KEY = "sb_publishable_gVM4AyknTEMEZuRDx9YiHg_MyiZJtNy";
-
     const supabase = Supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     let currentMode = "user"; 
 
     // Prüfen, ob das Passwort bereits im Browser gespeichert ist
     window.onload = async () => {
         const savedPassword = localStorage.getItem('site_password');
-        if (savedPassword) {
+        if (savedPassword && savedPassword.trim() !== "") {
             document.getElementById('login-input').value = savedPassword;
             await handleLogin();
         }
@@ -167,45 +165,44 @@
     async function handleLogin() {
         const enteredPassword = document.getElementById('login-input').value;
         const errorEl = document.getElementById('login-error');
-
-        const { data, error } = await supabase
-            .from('website_passwords')
-            .select('password_hash')
-            .eq('role', currentMode)
-            .single();
-
-        if (error || !data) {
-            errorEl.innerText = "Fehler bei der Verbindung zur Datenbank.";
+        
+        if (!enteredPassword) {
+            errorEl.innerText = "Bitte ein Passwort eingeben.";
             return;
         }
 
-        if (enteredPassword === data.password_hash) {
-            if (currentMode === 'user') {
-                localStorage.setItem('site_password', enteredPassword);
+        try {
+            const { data, error } = await supabase
+                .from('website_passwords')
+                .select('password_hash')
+                .eq('role', currentMode)
+                .single();
+
+            if (error || !data) {
+                errorEl.innerText = "Verbindungsfehler oder Tabelle unvollständig.";
+                console.error(error);
+                return;
             }
 
-            document.getElementById('login-overlay').classList.add('auth-hidden');
-            
-            if (currentMode === 'admin') {
-                document.getElementById('view-admin').classList.remove('auth-hidden');
+            if (enteredPassword === data.password_hash) {
+                if (currentMode === 'user') {
+                    localStorage.setItem('site_password', enteredPassword);
+                }
+
+                document.getElementById('login-overlay').classList.add('auth-hidden');
+                
+                if (currentMode === 'admin') {
+                    document.getElementById('view-admin').classList.remove('auth-hidden');
+                } else {
+                    document.getElementById('game-wrapper').classList.remove('auth-hidden');
+                }
             } else {
-                document.getElementById('game-wrapper').classList.remove('auth-hidden');
+                localStorage.removeItem('site_password');
+                errorEl.innerText = "Falsches Passwort! Bitte versuche es erneut.";
             }
-        } else {
-            localStorage.removeItem('site_password');
-            errorEl.innerText = "Falsches Passwort! Bitte versuche es erneut.";
+        } catch (e) {
+            errorEl.innerText = "Kritischer Fehler bei der Abfrage.";
+            console.error(e);
         }
     }
 
-    async function changePassword(role) {
-        const inputId = role === 'user' ? 'new-user-pw' : 'new-admin-pw';
-        const newPassword = document.getElementById(inputId).value;
-
-        if (!newPassword) return alert("Bitte ein neues Passwort eintippen.");
-
-        const { error } = await supabase
-            .from('website_passwords')
-            .update({ password_hash: newPassword })
-            .eq('role', role);
-
-        if (error) {
