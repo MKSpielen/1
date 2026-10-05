@@ -139,7 +139,6 @@
     const supabase = Supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     let currentMode = "user"; 
 
-    // Beim Laden wird NUR geschaut, ob lokal ein Passwort liegt. Keine blockierende Web-Schleife mehr!
     window.onload = () => {
         const savedPassword = localStorage.getItem('site_password');
         if (savedPassword && savedPassword.trim() !== "") {
@@ -173,7 +172,7 @@
             return;
         }
 
-        errorEl.innerText = "Prüfe Passwort...";
+        errorEl.innerText = "Verbinde...";
 
         try {
             const { data, error } = await supabase
@@ -182,9 +181,14 @@
                 .eq('role', currentMode)
                 .single();
 
-            if (error || !data) {
-                errorEl.innerText = "Fehler: Keine Antwort von der Datenbank (CORS Blockade am Handy?)";
+            if (error) {
+                errorEl.innerText = "Fehler: Tabelle blockiert (RLS aktiv?).";
                 console.error(error);
+                return;
+            }
+
+            if (!data) {
+                errorEl.innerText = "Fehler: Passwort-Eintrag existiert nicht.";
                 return;
             }
 
@@ -203,6 +207,6 @@
                 }
             } else {
                 localStorage.removeItem('site_password');
-                errorEl.innerText = "Falsches Passwort! Bitte versuche es erneut.";
+                errorEl.innerText = "Falsches Passwort!";
             }
         } catch (e) {
